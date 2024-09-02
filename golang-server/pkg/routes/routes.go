@@ -114,7 +114,7 @@ func RegisterRoutes(app *fiber.App) {
 			return c.Status(fiber.StatusBadRequest).SendString("Error sending image to face recognition service")
 		}
 
-		config.DB.MustExec(`UPDATE users SET mfa = true WHERE id = $1`, id)
+		// config.DB.MustExec(`UPDATE users SET mfa = true WHERE id = $1`, id)
 		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"success": "true"})
 
 	})
@@ -147,7 +147,7 @@ func RegisterRoutes(app *fiber.App) {
 		if verify.Verified {
 			return c.Status(fiber.StatusOK).JSON(&fiber.Map{"verified": "true"})
 		}
-		return c.Status(fiber.StatusBadRequest).JSON(&fiber.Map{"verified": "false"})
+		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"verified": "false"})
 	})
 
 }
