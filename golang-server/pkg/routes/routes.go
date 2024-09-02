@@ -2,12 +2,14 @@ package routes
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -106,7 +108,7 @@ func RegisterRoutes(app *fiber.App) {
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).SendString("Error opening face image")
 		}
-		err = SendImageToFaceRecognitionService(fileRead, strconv.Itoa(id))
+		err = RegisterImageToFaceRecognitionService(fileRead, strconv.Itoa(id))
 		if err != nil {
 			log.Println(err)
 			return c.Status(fiber.StatusBadRequest).SendString("Error sending image to face recognition service")
@@ -116,9 +118,105 @@ func RegisterRoutes(app *fiber.App) {
 		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"success": "true"})
 
 	})
+	app.Post("api/v1/mfa/face/verify", func(c *fiber.Ctx) error {
+		id, err := strconv.Atoi(c.FormValue("user_id"))
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Invalid user ID")
+		}
+		faceImage, err := c.FormFile("face_image")
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("User ID and face image are required")
+		}
+		user := User{
+			ID: id,
+		}
+		err = config.DB.Get(&user, "SELECT * FROM users WHERE id = $1", id)
+		if err != nil {
+			fmt.Print(err)
+			return c.Status(fiber.StatusBadRequest).SendString("User not found")
+		}
+		fileRead, err := faceImage.Open()
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Error opening face image")
+		}
+		verify, err := VerifyImageOnFaceRecognitionService(fileRead, strconv.Itoa(id))
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Error verifying image")
+		}
+		fmt.Println(verify)
+		if verify.Verified {
+			return c.Status(fiber.StatusOK).JSON(&fiber.Map{"verified": "true"})
+		}
+		return c.Status(fiber.StatusBadRequest).JSON(&fiber.Map{"verified": "false"})
+	})
+
 }
 
-func SendImageToFaceRecognitionService(fileRead io.Reader, name string) error {
+type VerifyResponse struct {
+	Verified bool `json:"success"`
+}
+type VerifyServiceResponse struct {
+	Status    string  `json:"status"`
+	Verified  bool    `json:"verified"`
+	Distance  float64 `json:"distance"`
+	Threshold float64 `json:"threshold"`
+}
+
+func VerifyImageOnFaceRecognitionService(fileRead io.Reader, name string) (*VerifyResponse, error) {
+	var b bytes.Buffer
+	w := multipart.NewWriter(&b)
+	fw, err := w.CreateFormFile("image", "face.jpg")
+	if err != nil {
+		return nil, err
+	}
+	_, err = io.Copy(fw, fileRead)
+	if err != nil {
+		return nil, err
+	}
+
+	nw, err := w.CreateFormField("name")
+	if err != nil {
+		return nil, err
+	}
+	_, err = io.WriteString(nw, name)
+	if err != nil {
+		return nil, err
+	}
+	w.Close()
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/v1/face-recognition", os.Getenv("FACE_RECOGNITION_SERVICE_URL")), &b)
+	if err != nil {
+		return nil, err
+		// return c.Status(fiber.StatusBadRequest).SendString("Error opening face image")
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, errors.New("face recognition service returned non-200 status code")
+		// return c.Status(fiber.StatusBadRequest).SendString("Error opening face image")
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var data VerifyServiceResponse
+	err = json.Unmarshal(body, &data)
+	if err != nil {
+		return nil, err
+	}
+	if data.Verified {
+		return &VerifyResponse{Verified: true}, nil
+	}
+	return &VerifyResponse{Verified: false}, nil
+}
+
+func RegisterImageToFaceRecognitionService(fileRead io.Reader, name string) error {
 	var b bytes.Buffer
 	w := multipart.NewWriter(&b)
 	fw, err := w.CreateFormFile("image", "face.jpg")
@@ -138,7 +236,7 @@ func SendImageToFaceRecognitionService(fileRead io.Reader, name string) error {
 		return err
 	}
 	w.Close()
-	req, err := http.NewRequest("POST", "http://localhost:5000/api/v1/register", &b)
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/v1/register", os.Getenv("FACE_RECOGNITION_SERVICE_URL")), &b)
 	if err != nil {
 		return err
 	}
