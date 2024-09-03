@@ -62,26 +62,6 @@ func RegisterRoutes(app *fiber.App) {
 		return c.Status(fiber.StatusCreated).JSON(&fiber.Map{"id": alreadyExists.ID, "name": alreadyExists.Name, "email": alreadyExists.Email})
 
 	})
-	app.Post("/api/v1/login", func(c *fiber.Ctx) error {
-		var req UserLoginRequest
-		if err := c.BodyParser(&req); err != nil {
-			return err
-		}
-		if req.Email == "" || req.Password == "" {
-			return c.Status(fiber.StatusBadRequest).SendString("Email and password are required")
-		}
-		user := User{
-			ID: -1,
-		}
-		config.DB.Get(&user, "SELECT * FROM users WHERE email = $1", req.Email)
-		if user.ID == -1 {
-			return c.Status(fiber.StatusUnauthorized).SendString("Invalid email or password")
-		}
-		if user.Password != utils.HashPassword(req.Password) {
-			return c.Status(fiber.StatusUnauthorized).SendString("Invalid email or password")
-		}
-		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"success": "true"})
-	})
 	app.Post("/api/v1/mfa/face/register", func(c *fiber.Ctx) error {
 		id, err := strconv.Atoi(c.FormValue("user_id"))
 		if err != nil {
@@ -148,6 +128,36 @@ func RegisterRoutes(app *fiber.App) {
 			return c.Status(fiber.StatusOK).JSON(&fiber.Map{"verified": "true"})
 		}
 		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"verified": "false"})
+	})
+	app.Post("/api/v1/login", func(c *fiber.Ctx) error {
+		var req UserLoginRequest
+		if err := c.BodyParser(&req); err != nil {
+			return err
+		}
+		user := User{}
+		config.DB.Get(&user, "SELECT * FROM users WHERE email = $1", req.Email)
+		if user.ID == -1 {
+			return c.Status(fiber.StatusUnauthorized).SendString("Invalid email or password")
+		}
+		if user.Password != utils.HashPassword(req.Password) {
+			return c.Status(fiber.StatusUnauthorized).SendString("Invalid email or password")
+		}
+		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"success": "true", "id": user.ID})
+	})
+	app.Get("/api/v1/user/:id", func(c *fiber.Ctx) error {
+		id, err := strconv.Atoi(c.Params("id"))
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Invalid user ID")
+		}
+		user := User{
+			ID: id,
+		}
+		err = config.DB.Get(&user, "SELECT * FROM users WHERE id = $1", id)
+		if err != nil {
+			fmt.Print(err)
+			return c.Status(fiber.StatusBadRequest).SendString("User not found")
+		}
+		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"id": user.ID, "name": user.Name, "email": user.Email})
 	})
 
 }

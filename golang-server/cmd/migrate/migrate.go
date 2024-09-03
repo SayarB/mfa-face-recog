@@ -31,6 +31,17 @@ func main() {
 	// `)
 
 	db.MustExec(`
-		DELETE FROM users;
+		DROP TABLE IF EXISTS users;
 	`)
+	db.MustExec(`
+		CREATE TABLE IF NOT EXISTS users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			email TEXT NOT NULL UNIQUE,
+			password TEXT NOT NULL,
+			mfa BOOLEAN NOT NULL DEFAULT false
+		);
+	`)
+
+	// db.MustExec(`UPDATE users SET mfa = false WHERE id = 1`)
 }
