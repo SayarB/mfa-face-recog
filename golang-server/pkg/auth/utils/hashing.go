@@ -1,4 +1,3 @@
-// hash a text with crypto/sha256
 package utils
 
 import (

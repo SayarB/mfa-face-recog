@@ -21,8 +21,11 @@ const MFARegister = () => {
     }, [])
 
     const getUser = async (userid: string) => {
-        const res = await fetch(`http://localhost:8000/api/v1/user/${userid}`, {
+        const res = await fetch(`http://localhost:8000/api/v1/user`, {
             method: "GET",
+            headers: {
+                "Authorization": `BEARER ${localStorage.getItem("mfa_token")}`
+            }
         })
         const data = await res.json();
         if (res.status.toString().startsWith("2")) {
@@ -34,6 +37,7 @@ const MFARegister = () => {
     const handleSubmit = () => {
         // get video frame at the moment and send it to the server
         if (ref.current === null) return;
+        ref.current.pause()
         const canvas = document.createElement("canvas");
         canvas.width = ref.current?.videoWidth || 0;
         canvas.height = ref.current?.videoHeight || 0;
@@ -49,13 +53,16 @@ const MFARegister = () => {
                 console.log(userId);
                 formData.append("user_id", userId ?? '1');
                 formData.append("face_image", blob);
-                const res = await fetch("http://localhost:8000/api/v1/mfa/face/register", {
+                const res = await fetch("http://localhost:8000/api/v1/mfa/face/register/image", {
                     method: "POST",
+                    headers: {
+                        "Authorization": `BEARER ${localStorage.getItem("mfa_token")}`
+                    },
                     body: formData,
                 })
 
                 if (res.status.toString().startsWith("2")) {
-                    window.location.href = "/auth/login";
+                    window.location.href = "/mfa/verify/face";
                 }
             }
         }, "image/jpeg");
@@ -64,8 +71,8 @@ const MFARegister = () => {
     return (
         <main className="w-screen h-screen flex justify-center items-center">
             <div className="absolute top-[50%] left-[50%] -translate-x-[50%] -translate-y-[50%] h-[400px] aspect-video flex flex-col justify-center items-center">
-                <h1>Account Id: {localStorage.getItem("user_id")}</h1>
-                <h1>Name: {loading ? "loading" : userName}</h1>
+                {/* <h1>Account Id: {localStorage.getItem("user_id")}</h1> */}
+                <h1>Registering: {loading ? "loading" : userName}</h1>
                 <video src="" ref={ref} className="w-full"></video>
                 <button className="mt-2 py-2 px-4 bg-blue-500 text-white rounded-md" onClick={handleSubmit}>Submit</button>
             </div>

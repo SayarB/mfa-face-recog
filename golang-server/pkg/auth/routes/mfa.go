@@ -13,56 +13,19 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/mfa-face-recog/pkg/config"
-	"github.com/mfa-face-recog/pkg/utils"
+	"github.com/mfa-face-recog/pkg/auth/config"
+	"github.com/mfa-face-recog/pkg/auth/middlewares"
+	"github.com/mfa-face-recog/pkg/auth/utils"
 )
 
-type UserRegisterRequest struct {
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-type User struct {
-	ID       int    `json:"id"`
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	MFA      bool   `json:"mfa"`
+type SessionStatus struct {
+	IsComplete bool `json:"isComplete"`
+	IsSuccess  bool `json:"isSuccess"`
+	IsFailed   bool `json:"isFailed"`
 }
 
-type UserLoginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-
-func RegisterRoutes(app *fiber.App) {
-	app.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("Hello, World!")
-	})
-	app.Post("/api/v1/register", func(c *fiber.Ctx) error {
-		var req UserRegisterRequest
-		if err := c.BodyParser(&req); err != nil {
-			return err
-		}
-		if req.Name == "" || req.Email == "" || req.Password == "" {
-			return c.Status(fiber.StatusBadRequest).SendString("Email and password are required")
-		}
-		alreadyExists := &User{
-			ID: -1,
-		}
-		config.DB.Get(alreadyExists, "SELECT * FROM users WHERE email = $1", req.Email)
-		fmt.Println("exists", alreadyExists.ID)
-		if alreadyExists.ID != -1 {
-			return c.Status(fiber.StatusBadRequest).SendString("Email already exists")
-		}
-		hashedPassword := utils.HashPassword(req.Password)
-		config.DB.MustExec(`INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id`, req.Name, req.Email, hashedPassword)
-		config.DB.Get(alreadyExists, "SELECT * FROM users WHERE email = $1", req.Email)
-
-		return c.Status(fiber.StatusCreated).JSON(&fiber.Map{"id": alreadyExists.ID, "name": alreadyExists.Name, "email": alreadyExists.Email})
-
-	})
-	app.Post("/api/v1/mfa/face/register", func(c *fiber.Ctx) error {
+func MFARoutes(app *fiber.App) {
+	app.Post("/api/v1/mfa/face/register/image", func(c *fiber.Ctx) error {
 		id, err := strconv.Atoi(c.FormValue("user_id"))
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).SendString("Invalid user ID")
@@ -98,11 +61,55 @@ func RegisterRoutes(app *fiber.App) {
 		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"success": "true"})
 
 	})
-	app.Post("api/v1/mfa/face/verify", func(c *fiber.Ctx) error {
-		id, err := strconv.Atoi(c.FormValue("user_id"))
+	app.Get("/api/v1/mfa/session/:id/status", func(c *fiber.Ctx) error {
+		id := c.Params("id")
+		idInt, err := strconv.Atoi(id)
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid user ID")
+			return c.Status(fiber.StatusBadRequest).SendString("Invalid session ID")
 		}
+		session := &middlewares.MFASession{
+			ID: idInt,
+		}
+		err = config.DB.Get(session, "SELECT * FROM mfa_sessions WHERE id = $1", idInt)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Session not found")
+		}
+
+		if session.Used {
+			return c.Status(fiber.StatusBadRequest).JSON(&SessionStatus{IsComplete: true, IsSuccess: session.Match, IsFailed: !session.Match})
+		}
+		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"isComplete": false, "isSuccess": false, "isFailed": false})
+	})
+	app.Get("/api/v1/mfa/sessiontoken", func(c *fiber.Ctx) error {
+		id := c.Locals("user_id").(int)
+		user := User{
+			ID: id,
+		}
+		fmt.Println(id)
+		err := config.DB.Get(&user, "SELECT * FROM users WHERE id = $1", id)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("User not found")
+		}
+		session, err := utils.CreateMFASession(id)
+		fmt.Printf("created\n sessionID: %s sessionToken: %s\n", session.ID, session.Token)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Error creating session token")
+		}
+		if user.Pub == nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Public key not found")
+		}
+		encToken, err := utils.Encrypt(session.Token, *user.Pub)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Error encrypting session token")
+		}
+		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"success": "true", "session_token": encToken, "session_id": session.ID})
+	})
+	app.Post("api/v1/mfa/face/verify", func(c *fiber.Ctx) error {
+		id := c.Locals("user_id").(int)
+		sessionId := c.Locals("session_id").(int)
+
+		fmt.Println(id)
+
 		faceImage, err := c.FormFile("face_image")
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).SendString("User ID and face image are required")
@@ -110,7 +117,19 @@ func RegisterRoutes(app *fiber.App) {
 		user := User{
 			ID: id,
 		}
+
+		session := middlewares.MFASession{
+			ID: sessionId,
+		}
+
 		err = config.DB.Get(&user, "SELECT * FROM users WHERE id = $1", id)
+		if err != nil {
+			fmt.Print(err)
+			return c.Status(fiber.StatusBadRequest).SendString("User not found")
+		}
+
+		err = config.DB.Get(&session, "SELECT * FROM mfa_sessions WHERE id = $1", sessionId)
+
 		if err != nil {
 			fmt.Print(err)
 			return c.Status(fiber.StatusBadRequest).SendString("User not found")
@@ -121,45 +140,26 @@ func RegisterRoutes(app *fiber.App) {
 		}
 		verify, err := VerifyImageOnFaceRecognitionService(fileRead, strconv.Itoa(id))
 		if err != nil {
+			fmt.Println(err)
 			return c.Status(fiber.StatusBadRequest).SendString("Error verifying image")
 		}
 		fmt.Println(verify)
+
 		if verify.Verified {
+			if session.PosVerified < 2 {
+				config.DB.MustExec(`UPDATE mfa_sessions SET pos_verified = $1, neg_verified = 0 WHERE id = $2`, session.PosVerified+1, sessionId)
+			} else {
+				config.DB.MustExec(`UPDATE mfa_sessions SET match = $1, used = $2, used_at = CURRENT_TIMESTAMP WHERE id = $3`, true, true, sessionId)
+			}
 			return c.Status(fiber.StatusOK).JSON(&fiber.Map{"verified": "true"})
+		}
+		if session.NegVerified < 4 {
+			config.DB.MustExec(`UPDATE mfa_sessions SET neg_verified = $1 WHERE id = $2`, session.NegVerified+1, sessionId)
+		} else {
+			config.DB.MustExec(`UPDATE mfa_sessions SET match = $1, used = $2, used_at = CURRENT_TIMESTAMP WHERE id = $3`, false, true, sessionId)
 		}
 		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"verified": "false"})
 	})
-	app.Post("/api/v1/login", func(c *fiber.Ctx) error {
-		var req UserLoginRequest
-		if err := c.BodyParser(&req); err != nil {
-			return err
-		}
-		user := User{}
-		config.DB.Get(&user, "SELECT * FROM users WHERE email = $1", req.Email)
-		if user.ID == -1 {
-			return c.Status(fiber.StatusUnauthorized).SendString("Invalid email or password")
-		}
-		if user.Password != utils.HashPassword(req.Password) {
-			return c.Status(fiber.StatusUnauthorized).SendString("Invalid email or password")
-		}
-		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"success": "true", "id": user.ID})
-	})
-	app.Get("/api/v1/user/:id", func(c *fiber.Ctx) error {
-		id, err := strconv.Atoi(c.Params("id"))
-		if err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid user ID")
-		}
-		user := User{
-			ID: id,
-		}
-		err = config.DB.Get(&user, "SELECT * FROM users WHERE id = $1", id)
-		if err != nil {
-			fmt.Print(err)
-			return c.Status(fiber.StatusBadRequest).SendString("User not found")
-		}
-		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"id": user.ID, "name": user.Name, "email": user.Email})
-	})
-
 }
 
 type VerifyResponse struct {

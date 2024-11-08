@@ -34,14 +34,14 @@ const Register = () => {
             const data = await res.json();
             alert("Registration successful user id = " + data.id);
             localStorage.setItem("user_id", JSON.stringify(data.id));
-            window.location.href = "/mfa/register";
+            window.location.href = "/auth/login";
         } else {
             alert("Registration failed");
         }
     };
     return (
         <main className="">
-            <div className="flex flex-col items-center justify-center">
+            <div className="flex flex-col items-center justify-center h-screen">
                 <h1>Register</h1>
                 <form onSubmit={handleSubmit}>
                     <div className="flex flex-col w-[300px]">
@@ -49,7 +49,7 @@ const Register = () => {
                         <input type="text" name="email" placeholder="Email" className="border-2 my-2" />
                         <input type="password" name="password" placeholder="Password" className="border-2 my-2" />
                         <input type="password" name="confirmPassword" placeholder="Confirm Password" className="border-2 my-2" />
-                        <button type="submit">Submit</button>
+                        <button className="mt-2 py-2 w-full bg-blue-500 text-white rounded-md" type="submit">Submit</button>
                     </div>
                 </form>
             </div>

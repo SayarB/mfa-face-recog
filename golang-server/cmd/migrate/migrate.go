@@ -30,18 +30,33 @@ func main() {
 	// 	);
 	// `)
 
-	db.MustExec(`
-		DROP TABLE IF EXISTS users;
-	`)
-	db.MustExec(`
-		CREATE TABLE IF NOT EXISTS users (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			name TEXT NOT NULL,
-			email TEXT NOT NULL UNIQUE,
-			password TEXT NOT NULL,
-			mfa BOOLEAN NOT NULL DEFAULT false
-		);
-	`)
+	// db.MustExec(`
+	// 	DROP TABLE IF EXISTS users;
+	// `)
+	// db.MustExec(`
+	// 	CREATE TABLE IF NOT EXISTS users (
+	// 		id INTEGER PRIMARY KEY AUTOINCREMENT,
+	// 		name TEXT NOT NULL,
+	// 		email TEXT NOT NULL UNIQUE,
+	// 		password TEXT NOT NULL,
+	// 		mfa BOOLEAN NOT NULL DEFAULT false,
+	// 		pub TEXT DEFAULT NULL
+	// 	);
+	// `)
 
 	// db.MustExec(`UPDATE users SET mfa = false WHERE id = 1`)
+	db.MustExec(`DROP TABLE IF EXISTS mfa_sessions;`)
+	db.MustExec(`
+		CREATE TABLE IF NOT EXISTS mfa_sessions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			pos_verified INTEGER NOT NULL DEFAULT false,
+			neg_verified INTEGER NOT NULL DEFAULT false,
+			match BOOLEAN NOT NULL DEFAULT false,
+			used BOOLEAN NOT NULL DEFAULT false,
+			used_at TIMESTAMP NULL,
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		);
+	`)
 }

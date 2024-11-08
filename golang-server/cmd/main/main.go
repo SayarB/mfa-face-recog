@@ -4,8 +4,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/joho/godotenv"
-	"github.com/mfa-face-recog/pkg/config"
-	"github.com/mfa-face-recog/pkg/routes"
+	"github.com/mfa-face-recog/pkg/auth/config"
+	"github.com/mfa-face-recog/pkg/auth/routes"
 )
 
 func main() {
@@ -15,8 +15,9 @@ func main() {
 	app := fiber.New(fiber.Config{
 		Immutable: true,
 	})
+
 	app.Use(cors.New())
+	routes.RegisterMiddlewares(app)
 	routes.RegisterRoutes(app)
 	app.Listen(":8000")
-
 }
