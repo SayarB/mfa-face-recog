@@ -21,6 +21,13 @@ type MFASession struct {
 	UsedAt      *time.Time `db:"used_at" json:"used_at"`
 	CreatedAt   *time.Time `db:"created_at" json:"created_at"`
 }
+type RegisterSession struct {
+	ID        int        `db:"id" json:"id"`
+	UserID    int        `db:"user_id" json:"user_id"`
+	Used      bool       `db:"used" json:"used"`
+	UsedAt    *time.Time `db:"used_at" json:"used_at"`
+	CreatedAt *time.Time `db:"created_at" json:"created_at"`
+}
 
 func AuthMiddleware(c *fiber.Ctx) error {
 	bearerToken := c.Get("Authorization")
@@ -112,6 +119,53 @@ func MFASessionMiddleware(c *fiber.Ctx) error {
 	err = config.DB.Get(&session, "SELECT * from mfa_sessions where id=$1", sessionId)
 	if err != nil {
 		fmt.Printf("error while session fetch %v", err)
+		return c.Status(fiber.StatusBadRequest).JSON(&fiber.Map{"success": "false", "message": "Session not found"})
+	}
+
+	if session.Used {
+		return c.Status(fiber.StatusBadRequest).JSON(&fiber.Map{"success": "false", "message": "Session already expired"})
+	}
+
+	c.Locals("user_id", userId)
+	c.Locals("session_id", sessionId)
+
+	return c.Next()
+}
+
+func MFARegisterSessionMiddleware(c *fiber.Ctx) error {
+	bearerToken := c.Get("Authorization")
+	if bearerToken == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(&fiber.Map{"success": "false", "message": "Unauthorized"})
+	}
+
+	token := strings.Split(bearerToken, "BEARER ")[1]
+
+	valid, err := utils.VerifyMFARegisterSession(token)
+	if err != nil {
+		fmt.Println(err)
+		return c.Status(fiber.StatusUnauthorized).JSON(&fiber.Map{"success": "false", "message": "Unauthorized"})
+	}
+	if !valid {
+		fmt.Println("token not valid")
+		return c.Status(fiber.StatusUnauthorized).JSON(&fiber.Map{"success": "false", "message": "Unauthorized"})
+	}
+
+	userId, err := utils.GetClaimFromToken(token, os.Getenv("JWT_MFA_REGISTER_SESSION_SECRET"), "user_id")
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(&fiber.Map{"success": "false", "message": "Unauthorized"})
+	}
+	sessionId, err := utils.GetClaimFromToken(token, os.Getenv("JWT_MFA_REGISTER_SESSION_SECRET"), "id")
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(&fiber.Map{"success": "false", "message": "Unauthorized"})
+	}
+
+	session := RegisterSession{
+		ID: sessionId,
+	}
+	fmt.Printf("session id = %d", sessionId)
+	err = config.DB.Get(&session, "SELECT * from register_session where id=$1", sessionId)
+	if err != nil {
+		fmt.Println(err)
 		return c.Status(fiber.StatusBadRequest).JSON(&fiber.Map{"success": "false", "message": "Session not found"})
 	}
 

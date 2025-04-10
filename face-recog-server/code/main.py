@@ -1,5 +1,5 @@
 from flask import Flask, request
-from deepface import DeepFace
+from deepface import DeepFace as model
 app = Flask(__name__)
 
 
@@ -16,7 +16,7 @@ def face_recognition():
     name = request.form['name']
     image.save('./uploads/'+name+'.jpg')
     # perform face recognition on the image
-    ans  = DeepFace.verify('./uploads/'+name+'.jpg', './images/'+name+'.jpg', model_name='Facenet', detector_backend='mtcnn', enforce_detection=False)
+    ans  = model.verify('./uploads/'+name+'.jpg', './images/'+name+'.jpg', model_name='Facenet', detector_backend='mtcnn', enforce_detection=False)
     return {'status':'success', 'verified':dict(ans)['verified'], 'distance':dict(ans)['distance'], 'threshold':dict(ans)['threshold']}
 
 # post route to register a new user

@@ -1,13 +1,12 @@
 "use client"
-import { useKeyPair } from '@/app/context/keyContext';
-import { useLongPolling } from '@/hooks/useLongPolling';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import QRCode from 'react-qr-code';
+import { useLongPolling } from "@/hooks/useLongPolling";
+import { useEffect, useState } from "react";
+import QRCode from "react-qr-code";
 
-const FaceVerify = () => {
+const FaceRegister = () => {
     const [sessionToken, setSessionToken] = useState<string>("");
     const [sessionId, setSessionId] = useState<string>("")
-    const { data, isLoading, error } = useLongPolling(`http://localhost:8000/api/v1/mfa/session/${sessionId}/status`, {
+    const { data, isLoading, error } = useLongPolling(`http://localhost:8000/api/v1/mfa/register/session/${sessionId}/status`, {
         method: "GET",
         headers: {
             "Content-Type": "application/json",
@@ -15,7 +14,7 @@ const FaceVerify = () => {
     }, sessionId !== "")
     const getSessionToken = async (mfa_token: string) => {
         setSessionToken("")
-        const res = await fetch(`http://localhost:8000/api/v1/mfa/sessiontoken`, {
+        const res = await fetch(`http://localhost:8000/api/v1/mfa/register/sessiontoken`, {
             headers: {
                 "Content-Type": "application/json",
                 "Authorization": `BEARER ${mfa_token}`
@@ -53,19 +52,16 @@ const FaceVerify = () => {
     return (
         <div className='flex flex-col items-center justify-center h-screen'>
             {!data?.isComplete ? <>
-                <h1>Face Verify</h1>
+                <h1 className="text-3xl font-bold">Scan Qr Code</h1>
                 {sessionToken !== "" ? <QRCode value={`https://68e7-182-66-218-123.ngrok-free.app/mfa/verify?session_token=${encodeURIComponent(sessionToken)}`} /> : <p>Loading...</p>}
 
-                <a href={`http://localhost:3000/mfa/verify?session_token=${encodeURIComponent(sessionToken)}`} target="_blank" rel="noopener noreferrer" className='mt-2 py-2 px-4 bg-blue-500 text-white rounded-md'>Visit</a></> :
+                <a href={`http://localhost:3000/mfa/register?session_token=${encodeURIComponent(sessionToken)}`} target="_blank" rel="noopener noreferrer" className='mt-2 py-2 px-4 bg-blue-500 text-white rounded-md'>Visit</a></> :
                 <>
-                    {data.isSuccess ?
-                        <h1>Face Verified</h1>
-                        :
-                        <h1>Face Not Verified</h1>
-                    }
+                    <h1>Registration Complete</h1>
+                    <a className="mt-2 py-2 px-4 bg-blue-500 text-white rounded-md" href="/mfa/verify/face">Verification</a>
                 </>
             }
         </div>
     )
 }
-export default FaceVerify;
+export default FaceRegister;

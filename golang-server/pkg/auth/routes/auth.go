@@ -59,8 +59,7 @@ func AuthRoutes(app *fiber.App) {
 		user := User{}
 		err := config.DB.Get(&user, "SELECT * FROM users WHERE email = $1", req.Email)
 		if err != nil {
-			panic(err)
-			fmt.Println("user not found")
+			fmt.Printf("user not found - %v", err)
 			return c.Status(fiber.StatusUnauthorized).JSON(&fiber.Map{"success": "false", "message": "Invalid email or password"})
 		}
 		if user.Password != utils.HashPassword(req.Password) {
@@ -72,10 +71,6 @@ func AuthRoutes(app *fiber.App) {
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{"success": "false", "message": "Error creating token"})
 		}
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(&fiber.Map{"success": "false", "message": "Error encrpyting token"})
-		}
-		config.DB.MustExec(`UPDATE users SET pub = $1 WHERE id = $2`, req.PublicKey, user.ID)
 
 		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"success": "true", "id": user.ID, "mfa_enabled": user.MFA, "message": "Login successful", "token": token})
 	})

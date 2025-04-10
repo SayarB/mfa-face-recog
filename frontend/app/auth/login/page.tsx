@@ -4,14 +4,11 @@ import { useKeyPair } from "@/app/context/keyContext";
 import { useState } from "react";
 
 const LoginPage = () => {
-    const { generateKeyPair } = useKeyPair()
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         console.log(e.target);
-        const keyPair = await generateKeyPair()
         const formData = new FormData(e.target as HTMLFormElement);
         const formDataJson = Object.fromEntries(formData) as { email: string, password: string, public_key: string | null }
-        formDataJson.public_key = keyPair.publicKey
         const res = await fetch("http://localhost:8000/api/v1/login", {
             method: "POST",
             headers: {
@@ -27,7 +24,7 @@ const LoginPage = () => {
                 if (data.mfa_enabled) {
                     window.location.href = "/mfa/verify";
                 } else {
-                    window.location.href = "/mfa/register";
+                    window.location.href = "/mfa/register/face";
                 }
             }
         }

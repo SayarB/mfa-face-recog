@@ -35,6 +35,26 @@ func CreateMFASession(id int) (*SessionToken, error) {
 	return &SessionToken{ID: strconv.Itoa(sessionID), Token: tok}, nil
 }
 
+func CreateMFARegisterSession(id int) (*SessionToken, error) {
+	var sessionID int
+	err := config.DB.QueryRow(`INSERT INTO register_session (user_id) VALUES ($1) RETURNING id`, id).Scan(&sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	sessionToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"id":      sessionID,
+		"user_id": id,
+		"sub":     "register-session",
+		"exp":     time.Now().Add(time.Minute * 10).Unix(),
+	})
+	tok, err := sessionToken.SignedString([]byte(os.Getenv("JWT_MFA_REGISTER_SESSION_SECRET")))
+	if err != nil {
+		return nil, err
+	}
+	return &SessionToken{ID: strconv.Itoa(sessionID), Token: tok}, nil
+}
+
 func VerifyMFASession(tokenString string) (bool, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		return []byte(os.Getenv("JWT_MFA_SESSION_SECRET")), nil
@@ -47,6 +67,23 @@ func VerifyMFASession(tokenString string) (bool, error) {
 		return false, err
 	}
 	if sub != "mfa-session" {
+		return false, errors.New("subject not matching")
+	}
+	return token.Valid, nil
+}
+
+func VerifyMFARegisterSession(tokenString string) (bool, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("JWT_MFA_REGISTER_SESSION_SECRET")), nil
+	})
+	if err != nil {
+		return false, err
+	}
+	sub, err := token.Claims.GetSubject()
+	if err != nil {
+		return false, err
+	}
+	if sub != "register-session" {
 		return false, errors.New("subject not matching")
 	}
 	return token.Valid, nil

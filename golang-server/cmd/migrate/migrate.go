@@ -45,18 +45,29 @@ func main() {
 	// `)
 
 	// db.MustExec(`UPDATE users SET mfa = false WHERE id = 1`)
-	db.MustExec(`DROP TABLE IF EXISTS mfa_sessions;`)
+	// db.MustExec(`DROP TABLE IF EXISTS mfa_sessions;`)
+	// db.MustExec(`
+	// 	CREATE TABLE IF NOT EXISTS mfa_sessions (
+	// 		id INTEGER PRIMARY KEY AUTOINCREMENT,
+	// 		user_id INTEGER NOT NULL,
+	// 		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	// 		pos_verified INTEGER NOT NULL DEFAULT false,
+	// 		neg_verified INTEGER NOT NULL DEFAULT false,
+	// 		match BOOLEAN NOT NULL DEFAULT false,
+	// 		used BOOLEAN NOT NULL DEFAULT false,
+	// 		used_at TIMESTAMP NULL,
+	// 		FOREIGN KEY (user_id) REFERENCES users(id)
+	// 	);
+	// `)
+
 	db.MustExec(`
-		CREATE TABLE IF NOT EXISTS mfa_sessions (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id INTEGER NOT NULL,
-			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			pos_verified INTEGER NOT NULL DEFAULT false,
-			neg_verified INTEGER NOT NULL DEFAULT false,
-			match BOOLEAN NOT NULL DEFAULT false,
-			used BOOLEAN NOT NULL DEFAULT false,
-			used_at TIMESTAMP NULL,
-			FOREIGN KEY (user_id) REFERENCES users(id)
-		);
+	CREATE TABLE IF NOT EXISTS register_session (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		used BOOLEAN NOT NULL DEFAULT false,
+		used_at TIMESTAMP NULL,
+		FOREIGN KEY (user_id) REFERENCES users(id)
+	);
 	`)
 }

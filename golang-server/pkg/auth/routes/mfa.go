@@ -26,10 +26,10 @@ type SessionStatus struct {
 
 func MFARoutes(app *fiber.App) {
 	app.Post("/api/v1/mfa/face/register/image", func(c *fiber.Ctx) error {
-		id, err := strconv.Atoi(c.FormValue("user_id"))
-		if err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid user ID")
-		}
+		id := c.Locals("user_id").(int)
+		sessionId := c.Locals("session_id").(int)
+		pubKey := c.FormValue("public_key")
+
 		faceImage, err := c.FormFile("face_image")
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).SendString("User ID and face image are required")
@@ -56,10 +56,29 @@ func MFARoutes(app *fiber.App) {
 			log.Println(err)
 			return c.Status(fiber.StatusBadRequest).SendString("Error sending image to face recognition service")
 		}
-
+		config.DB.MustExec(`UPDATE users SET pub = $1 WHERE id = $2`, pubKey, user.ID)
+		config.DB.MustExec(`UPDATE register_session SET used = $1 WHERE id = $2`, true, sessionId)
 		// config.DB.MustExec(`UPDATE users SET mfa = true WHERE id = $1`, id)
 		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"success": "true"})
 
+	})
+	app.Get("/api/v1/mfa/register/sessiontoken", func(c *fiber.Ctx) error {
+		id := c.Locals("user_id").(int)
+		user := User{
+			ID: id,
+		}
+		fmt.Println(id)
+		err := config.DB.Get(&user, "SELECT * FROM users WHERE id = $1", id)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("User not found")
+		}
+		session, err := utils.CreateMFARegisterSession(id)
+
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Error creating session token")
+		}
+		fmt.Printf("created\n sessionID: %s sessionToken: %s\n", session.ID, session.Token)
+		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"success": "true", "session_token": session.Token, "session_id": session.ID})
 	})
 	app.Get("/api/v1/mfa/session/:id/status", func(c *fiber.Ctx) error {
 		id := c.Params("id")
@@ -77,6 +96,26 @@ func MFARoutes(app *fiber.App) {
 
 		if session.Used {
 			return c.Status(fiber.StatusBadRequest).JSON(&SessionStatus{IsComplete: true, IsSuccess: session.Match, IsFailed: !session.Match})
+		}
+		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"isComplete": false, "isSuccess": false, "isFailed": false})
+	})
+	app.Get("/api/v1/mfa/register/session/:id/status", func(c *fiber.Ctx) error {
+		id := c.Params("id")
+		idInt, err := strconv.Atoi(id)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Invalid session ID")
+		}
+		session := &middlewares.RegisterSession{
+			ID: idInt,
+		}
+		err = config.DB.Get(session, "SELECT * FROM register_session WHERE id = $1", idInt)
+		if err != nil {
+			fmt.Println(err)
+			return c.Status(fiber.StatusBadRequest).SendString("Session not found")
+		}
+
+		if session.Used {
+			return c.Status(fiber.StatusBadRequest).JSON(&SessionStatus{IsComplete: true, IsSuccess: true, IsFailed: false})
 		}
 		return c.Status(fiber.StatusOK).JSON(&fiber.Map{"isComplete": false, "isSuccess": false, "isFailed": false})
 	})

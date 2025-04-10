@@ -1,9 +1,13 @@
 "use client"
+import { useKeyPair } from "@/app/context/keyContext";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 const MFARegister = () => {
     const ref = useRef<HTMLVideoElement | null>(null)
+    const sessionToken = useSearchParams().get("session_token")
     const [loading, setLoading] = useState(true)
+    const { generateKeyPair } = useKeyPair()
     const [userName, setUserName] = useState("")
     let i = 0
     useEffect(() => {
@@ -51,18 +55,20 @@ const MFARegister = () => {
                 const formData = new FormData();
                 const userId = localStorage.getItem("user_id")
                 console.log(userId);
+                const keyPair = await generateKeyPair()
                 formData.append("user_id", userId ?? '1');
                 formData.append("face_image", blob);
+                formData.append("public_key", keyPair.publicKey ?? "");
                 const res = await fetch("http://localhost:8000/api/v1/mfa/face/register/image", {
                     method: "POST",
                     headers: {
-                        "Authorization": `BEARER ${localStorage.getItem("mfa_token")}`
+                        "Authorization": `BEARER ${sessionToken}`
                     },
                     body: formData,
                 })
 
                 if (res.status.toString().startsWith("2")) {
-                    window.location.href = "/mfa/verify/face";
+                    console.log("success")
                 }
             }
         }, "image/jpeg");

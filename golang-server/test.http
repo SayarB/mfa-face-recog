@@ -1,0 +1,8 @@
+POST http://localhost:8000/api/v1/login
+Content-Type: application/json
+
+{
+    "email": "sai@gmail.com",
+    "password": "dfdf"
+}
+
